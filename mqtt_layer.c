@@ -1,17 +1,15 @@
 #include <string.h>
-#include "MQTTPacket.h"
-
-#include "mqtt_layer.h"
-#include "config.h"
-
 #include "pico/types.h"
+#include "MQTTPacket.h"
+#include "config.h"
+#include "mqtt_layer.h"
 
-unsigned char mqqtReadBuffer[500];
-unsigned char *mqqtCurrentReadPointer = &mqqtReadBuffer[0];
-unsigned char *mqqtCurrentReadEndPointer = &mqqtReadBuffer[0];
+unsigned char mqtt_read_buffer[500];
+unsigned char *mqtt_read_buffer_read_position = mqtt_read_buffer;
+unsigned char *mqtt_read_buffer_write_position = mqtt_read_buffer;
 
-unsigned char mqttBuf[400];
-int mqttBufLen = sizeof(mqttBuf);
+unsigned char mqtt_write_buffer[400];
+int mqtt_write_buffer_length = sizeof(mqtt_write_buffer);
 
 uint mqqtReadPosition = 0;
 uint mqqtReadLength = 0;
@@ -55,9 +53,9 @@ int mqtt_initialize(
 
 int mqtt_connect()
 {
-    int len = MQTTSerialize_connect(mqttBuf, mqttBufLen, &mqttData);
+    int len = MQTTSerialize_connect(mqtt_write_buffer, mqtt_write_buffer_length, &mqttData);
 
-    connection_write(mqttBuf, len);
+    connection_write(mqtt_write_buffer, len);
 
     uint32_t loopNumber = 0;
 
@@ -77,7 +75,7 @@ int mqtt_connect()
             unsigned char sessionPresent, connack_rc;
             if (MQTTDeserialize_connack(&sessionPresent, &connack_rc, tmp, rlen) != 1 || connack_rc != 0)
             {
-                printf("Unable to connect, return code %d\n", connack_rc);
+                //printf("Unable to connect, return code %d\n", connack_rc);
 
                 return -1;
             }
@@ -86,20 +84,21 @@ int mqtt_connect()
         }
         else if (frc == -1)
         {
-            printf("MQTT FRC -1\r\n");
+            //printf("MQTT FRC -1\r\n");
+
             return -1;
         }
 
     } while (1);
 
-    printf("MQTT connected\n");
+    //printf("MQTT connected\n");
 }
 
 int mqtt_subscribe()
 {
-    int len = MQTTSerialize_subscribe(mqttBuf, mqttBufLen, 0, msgid, 1, &subscribeTopicString, &req_qos);
+    int len = MQTTSerialize_subscribe(mqtt_write_buffer, mqtt_write_buffer_length, 0, msgid, 1, &subscribeTopicString, &req_qos);
 
-    connection_write(mqttBuf, len);
+    connection_write(mqtt_write_buffer, len);
 
     int rlen;
     unsigned char tmp[512];
@@ -122,26 +121,28 @@ int mqtt_subscribe()
 
             if (granted_qos != 0)
             {
-                printf("granted qos != 0, %d\n", granted_qos);
+                //printf("granted qos != 0, %d\n", granted_qos);
+                
                 return -1;
             }
             break;
         }
         else if (frc == -1)
         {
-            printf("MQTT FRC -1\r\n");
+            //printf("MQTT FRC -1\r\n");
+
             return -1;
         }
     } while (1);
 
-    printf("Subscribed\n");
+    //printf("Subscribed\n");
 }
 
 int mqtt_send_ping()
 {
-    int len = MQTTSerialize_pingreq(mqttBuf, mqttBufLen);
+    int len = MQTTSerialize_pingreq(mqtt_write_buffer, mqtt_write_buffer_length);
 
-    connection_write(mqttBuf, len);
+    connection_write(mqtt_write_buffer, len);
 }
 
 enum MessageType mqtt_read_message()
@@ -196,39 +197,39 @@ enum MessageType mqtt_read_message()
 
 int mqtt_send_message(const unsigned char *message, size_t len)
 {
-    int rlen = MQTTSerialize_publish(mqttBuf, mqttBufLen, 0, 0, 0, 0, publishTopicString, (unsigned char*)message, len);
+    int rlen = MQTTSerialize_publish(mqtt_write_buffer, mqtt_write_buffer_length, 0, 0, 0, 0, publishTopicString, (unsigned char*)message, len);
 
-    connection_write(mqttBuf, rlen);
+    connection_write(mqtt_write_buffer, rlen);
 }
 
 int mqtt_fill_buffer(unsigned char *buf, int len)
 {
     mqqtReadLength += len;
 
-    memcpy(mqqtCurrentReadEndPointer, buf, len);
+    memcpy(mqtt_read_buffer_write_position, buf, len);
 }
 
 int mqtt_data_received(void *sck, unsigned char *buf, int count)
 {
     if (count < mqqtReadLength)
     {
-        memcpy(buf, mqqtCurrentReadPointer, count);
+        memcpy(buf, mqtt_read_buffer_read_position, count);
 
         mqqtReadLength = mqqtReadLength - count;
 
-        mqqtCurrentReadPointer = mqqtCurrentReadPointer + count;
+        mqtt_read_buffer_read_position = mqtt_read_buffer_read_position + count;
 
         return count;
     }
     else
     {
-        memcpy(buf, mqqtCurrentReadPointer, mqqtReadLength);
+        memcpy(buf, mqtt_read_buffer_read_position, mqqtReadLength);
 
         int output = mqqtReadLength;
 
         mqqtReadLength = 0;
-        mqqtCurrentReadPointer = &mqqtReadBuffer[0];
-        mqqtCurrentReadEndPointer = &mqqtReadBuffer[0];
+        mqtt_read_buffer_read_position = &mqtt_read_buffer[0];
+        mqtt_read_buffer_write_position = &mqtt_read_buffer[0];
 
         return output;
     }

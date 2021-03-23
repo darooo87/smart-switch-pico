@@ -14,8 +14,8 @@ set_target_properties(mqttpacket PROPERTIES
 add_executable(smart_switch
         smart_switch.c
         tcp_layer.c
-        mqtt_layer.c
-        ssl_layer.c)
+        ssl_layer.c
+        mqtt_layer.c)
         
 target_link_libraries(smart_switch pico_stdlib bearssl mqttpacket)
 

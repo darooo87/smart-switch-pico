@@ -1,14 +1,14 @@
+#include <stdio.h>
+
 #include "pico/stdlib.h"
 #include "pico/time.h"
 #include "hardware/uart.h"
 #include "hardware/irq.h"
 
-#include <stdio.h>
-
 #include "config.h"
 #include "tcp_layer.h"
-#include "mqtt_layer.h"
 #include "ssl_layer.h"
+#include "mqtt_layer.h"
 
 #define BAUD_RATE 115200
 
