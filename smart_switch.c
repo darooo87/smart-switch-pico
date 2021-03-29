@@ -11,6 +11,8 @@
 #include "mqtt_layer.h"
 
 #define BAUD_RATE 115200
+#define RELAY_PIN 22
+#define INFO_LED_PIN 25
 
 bool SendMqttKeepAlive = false;
 bool SendMqttDeviceState = false;
@@ -27,9 +29,15 @@ int main()
 
     board_initialize();
 
+    uart_puts(uart1, "board initialize done\r\n");
+
     tcp_initialize();
 
+    uart_puts(uart1, "tcp initialize done\r\n");
+
     int connection_id = tcp_connect(host, port);
+
+    uart_puts(uart1, "tcp connected\r\n");
 
     ssl_connect(host, tcp_read, tcp_write, &connection_id);
 
@@ -48,13 +56,18 @@ int main()
             switch (message)
             {
             case Pong:
-                printf("PONG\n");
+                uart_puts(uart1, "PONG\r\n");
+                gpio_put(INFO_LED_PIN, 1);
+                sleep_ms(500);
+                gpio_put(INFO_LED_PIN, 0);
                 break;
             case TurnOn:
-                printf("Turn On\n");
+                uart_puts(uart1, "Turn On\r\n");
+                gpio_put(RELAY_PIN, 1);
                 break;
             case TurnOff:
-                printf("Turn Off\n");
+                uart_puts(uart1, "Turn Off\r\n");
+                gpio_put(RELAY_PIN, 0);
                 break;
             }
         }
@@ -84,27 +97,38 @@ bool send_keep_alive(struct repeating_timer *t)
 
 void board_initialize()
 {
-    stdio_init_all();
+    uart_init(uart1, BAUD_RATE);
+    gpio_set_function(4, GPIO_FUNC_UART);
+    gpio_set_function(5, GPIO_FUNC_UART);
 
-    printf("\r\n\r\n*** program start ***\r\n\r\n");
+    sleep_ms(500);
+    
+    uart_puts(uart1, "\r\n\r\n*** program start ***\r\n\r\n");
 
     for (uint i = 0; i < 10; i++)
     {
-        printf(".");
+        uart_puts(uart1, ".");
         sleep_ms(1000);
     }
 
-    uart_init(uart1, BAUD_RATE);
-    gpio_set_function(8, GPIO_FUNC_UART);
-    gpio_set_function(9, GPIO_FUNC_UART);
+    uart_puts(uart1, "\r\n\r\n");
 
-    uart_set_fifo_enabled(uart1, false);
-    uart_set_hw_flow(uart1, false, false);
+    uart_init(uart0, BAUD_RATE);
+    gpio_set_function(16, GPIO_FUNC_UART);
+    gpio_set_function(17, GPIO_FUNC_UART);
 
-    irq_set_exclusive_handler(UART1_IRQ, uart_data_received_handler);
-    irq_set_enabled(UART1_IRQ, true);
+    gpio_init(RELAY_PIN);
+    gpio_set_dir(RELAY_PIN, GPIO_OUT);
 
-    uart_set_irq_enables(uart1, true, false);
+    gpio_init(INFO_LED_PIN);
+    gpio_set_dir(INFO_LED_PIN, GPIO_OUT);
 
-    printf("\r\n");
+    uart_set_fifo_enabled(uart0, false);
+    uart_set_hw_flow(uart0, false, false);
+
+    irq_set_exclusive_handler(UART0_IRQ, uart_data_received_handler);
+
+    irq_set_enabled(UART0_IRQ, true);
+
+    uart_set_irq_enables(uart0, true, false);
 }

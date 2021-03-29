@@ -5,6 +5,7 @@
 #include "hardware/uart.h"
 #include "pico/time.h"
 
+#include "config.h"
 #include "tcp_layer.h"
 
 bool esp01_at_ok_received = false;
@@ -28,35 +29,47 @@ uint readPosition = 0;
 
 void esp01_send_at_command(const unsigned char *command)
 {
+#ifdef AT_DEBUG
+    uart_puts(uart1, "AT - send at command start \r\n");
+#endif
+
     uint i = 0;
 
     while (true)
     {
-        if (uart_is_writable(uart1) || ++i > 100)
+        if (uart_is_writable(uart0) || ++i > 100)
             break;
 
         sleep_ms(10);
     }
 
-    if (uart_is_writable(uart1))
+    if (uart_is_writable(uart0))
     {
-        uart_puts(uart1, command);
+        uart_puts(uart0, command);
     }
 
     while (esp01_at_ok_received != true)
     {
+        sleep_ms(5);
     }
 
     esp01_at_ok_received = false;
+
+#ifdef AT_DEBUG
+    uart_puts(uart1, "AT - send at command complete \r\n");
+#endif
 }
 
 void esp01_send_at_bytes(const unsigned char *command, size_t len)
 {
+#ifdef AT_DEBUG
+    uart_puts(uart1, "AT - send at bytes command \r\n");
+#endif
     uint i = 0;
 
     while (true)
     {
-        if (uart_is_writable(uart1) || ++i > 100)
+        if (uart_is_writable(uart0) || ++i > 100)
             break;
 
         sleep_ms(10);
@@ -64,9 +77,9 @@ void esp01_send_at_bytes(const unsigned char *command, size_t len)
 
     for (int i = 0; i < len;)
     {
-        if (uart_is_writable(uart1))
+        if (uart_is_writable(uart0))
         {
-            uart_putc_raw(uart1, command[i]);
+            uart_putc_raw(uart0, command[i]);
             i++;
         }
         else
@@ -77,11 +90,14 @@ void esp01_send_at_bytes(const unsigned char *command, size_t len)
 
     while (esp01_at_ok_received != true)
     {
+        sleep_ms(5);
     }
 
     esp01_at_ok_received = false;
 
-    //printf("bytes end\r\n");
+#ifdef AT_DEBUG
+    uart_puts(uart1, "AT - send at bytes command complete \r\n");
+#endif
 }
 
 int tcp_initialize()
@@ -89,8 +105,25 @@ int tcp_initialize()
     esp01_send_at_command("AT+CIPMUX=1\r\n");
 }
 
+int connect_to_wifi(){
+
+    esp01_send_at_command("AT+CWMODE=1\r\n");
+
+    char atConnectCommand[100] = "AT+CWJAP=\"";
+    strcat(atConnectCommand, WIFI_SSID);
+    strcat(atConnectCommand, "\",\"");
+    strcat(atConnectCommand, WIFI_PASSWORD);
+    strcat(atConnectCommand, "\"\r\n");
+
+    esp01_send_at_command("AT+CWMODE=1\r\n");
+}
+
 int tcp_connect(const unsigned char *host, const unsigned char *port)
 {
+#ifdef TCP_DEBUG
+    uart_puts(uart1, "AT - TCP connect start \r\n");
+#endif
+
     char atConnectCommand[100] = "AT+CIPSTART=4,\"TCP\",\"";
     strcat(atConnectCommand, host);
     strcat(atConnectCommand, "\",");
@@ -100,6 +133,10 @@ int tcp_connect(const unsigned char *host, const unsigned char *port)
     esp01_send_at_command(atConnectCommand);
 
     return 4;
+
+#ifdef TCP_DEBUG
+    uart_puts(uart1, "AT - TCP connect complete \r\n");
+#endif
 }
 
 bool tcp_received_data()
@@ -122,8 +159,6 @@ int tcp_read(void *ctx, unsigned char *buf, size_t len)
 
         read_buffer_write_position = read_buffer_write_position + (int)len;
 
-        //printf("esp read a %d\r\n", (int)len);
-
         return (int)len;
     }
     else
@@ -135,8 +170,6 @@ int tcp_read(void *ctx, unsigned char *buf, size_t len)
         readLength = 0;
         read_buffer_write_position = &read_buffer[0];
         read_buffer_read_position = &read_buffer[0];
-
-        //printf("esp read b %d\r\n", output);
 
         return output;
     }
@@ -168,9 +201,9 @@ inline void clear_tmp_data_buffer()
 
 void uart_data_received_handler()
 {
-    while (uart_is_readable(uart1))
+    while (uart_is_readable(uart0))
     {
-        *tmp_buffer_position = uart_getc(uart1);
+        *tmp_buffer_position = uart_getc(uart0);
     }
 
     if (esp01_receiving_data)
@@ -181,7 +214,11 @@ void uart_data_received_handler()
 
         if (++dataPosition == dataLength)
         {
+
+#ifdef TCP_DEBUG
             //printf("received %d bytes\r\n", dataPosition);
+            uart_puts(uart1, "AT - TCP connect complete \r\n");
+#endif
 
             memcpy(read_buffer_read_position, &data_buffer[0], dataPosition);
 
@@ -228,10 +265,12 @@ void uart_data_received_handler()
         return;
     }
 
+#ifdef AT_DEBUG
     if (esp01_receiving_data == false && esp01_receiving_header == false)
     {
-        printf("%c", *tmp_buffer_position);
+        uart_putc(uart1, *tmp_buffer_position);
     }
+#endif
 
     if (*tmp_buffer_position == '\n')
     {

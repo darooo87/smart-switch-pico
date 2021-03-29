@@ -1,3 +1,4 @@
+  
 #ifndef SMARTSWITCH_CONFIG_H__
 #define SMARTSWITCH_CONFIG_H__
 
@@ -11,5 +12,15 @@
 // az iot hub generate-sas-token --device-id your-device-name --hub-name your-hub-name --duration 31536000
 #define IOT_PASSWORD ""
 #define IOT_KEEPALIVE_INTERVAL 20
+
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+
+#define AT_DEBUG
+//#define TCP_DEBUG
+//#define SSL_DEBUG
+//#define MQTT_DEBUG
+#define SWITCH_DEBUG
+
 
 #endif
