@@ -9,6 +9,7 @@
 #include "tcp_layer.h"
 
 bool esp01_at_ok_received = false;
+bool esp01_at_error_received = false;
 bool esp01_receiving_data = false;
 bool esp01_receiving_header = false;
 
@@ -27,7 +28,11 @@ unsigned char *read_buffer_read_position = &read_buffer[0];
 uint readLength = 0;
 uint readPosition = 0;
 
-void esp01_send_at_command(const unsigned char *command)
+#define UART_WRITE_SUCCESS 0
+#define UART_WRITE_TIME_EXCEEDED -1
+#define UART_WRITE_ERROR -2
+
+int esp01_send_at_command(const unsigned char *command)
 {
 #ifdef AT_DEBUG
     uart_puts(uart1, "AT - send at command start \r\n");
@@ -37,7 +42,10 @@ void esp01_send_at_command(const unsigned char *command)
 
     while (true)
     {
-        if (uart_is_writable(uart0) || ++i > 100)
+        if (++i > 100)
+            return UART_WRITE_TIME_EXCEEDED;
+
+        if (uart_is_writable(uart0))
             break;
 
         sleep_ms(10);
@@ -48,9 +56,20 @@ void esp01_send_at_command(const unsigned char *command)
         uart_puts(uart0, command);
     }
 
-    while (esp01_at_ok_received != true)
+    while (!esp01_at_ok_received && !esp01_at_error_received)
     {
         sleep_ms(5);
+    }
+
+    if (esp01_at_error_received)
+    {
+#ifdef AT_DEBUG
+        uart_puts(uart1, "AT - send at command returned error \r\n");
+#endif
+        esp01_at_ok_received = false;
+        esp01_at_error_received = false;
+
+        return UART_WRITE_ERROR;
     }
 
     esp01_at_ok_received = false;
@@ -58,9 +77,11 @@ void esp01_send_at_command(const unsigned char *command)
 #ifdef AT_DEBUG
     uart_puts(uart1, "AT - send at command complete \r\n");
 #endif
+
+    return UART_WRITE_SUCCESS;
 }
 
-void esp01_send_at_bytes(const unsigned char *command, size_t len)
+int esp01_send_at_bytes(const unsigned char *command, size_t len)
 {
 #ifdef AT_DEBUG
     uart_puts(uart1, "AT - send at bytes command \r\n");
@@ -69,7 +90,10 @@ void esp01_send_at_bytes(const unsigned char *command, size_t len)
 
     while (true)
     {
-        if (uart_is_writable(uart0) || ++i > 100)
+        if (++i > 100)
+            return UART_WRITE_TIME_EXCEEDED;
+
+        if (uart_is_writable(uart0))
             break;
 
         sleep_ms(10);
@@ -88,9 +112,20 @@ void esp01_send_at_bytes(const unsigned char *command, size_t len)
         }
     }
 
-    while (esp01_at_ok_received != true)
+    while (!esp01_at_ok_received && !esp01_at_error_received)
     {
         sleep_ms(5);
+    }
+
+    if (esp01_at_error_received)
+    {
+#ifdef AT_DEBUG
+        uart_puts(uart1, "AT - send at bytes returned error \r\n");
+#endif
+        esp01_at_ok_received = false;
+        esp01_at_error_received = false;
+
+        return UART_WRITE_ERROR;
     }
 
     esp01_at_ok_received = false;
@@ -98,6 +133,8 @@ void esp01_send_at_bytes(const unsigned char *command, size_t len)
 #ifdef AT_DEBUG
     uart_puts(uart1, "AT - send at bytes command complete \r\n");
 #endif
+
+    return UART_WRITE_SUCCESS;
 }
 
 int tcp_initialize()
@@ -105,7 +142,8 @@ int tcp_initialize()
     esp01_send_at_command("AT+CIPMUX=1\r\n");
 }
 
-int connect_to_wifi(){
+int connect_to_wifi()
+{
 
     esp01_send_at_command("AT+CWMODE=1\r\n");
 
@@ -187,8 +225,11 @@ int tcp_write(void *ctx, const unsigned char *buf, size_t len)
     strcat(atStartData, dataLength);
     strcat(atStartData, "\r\n");
 
-    esp01_send_at_command(atStartData);
-    esp01_send_at_bytes(buf, len);
+    if (esp01_send_at_command(atStartData) != UART_WRITE_SUCCESS)
+        return UART_WRITE_ERROR;
+
+    if (esp01_send_at_bytes(buf, len) != UART_WRITE_SUCCESS)
+        return UART_WRITE_ERROR;
 
     return (int)len;
 }
@@ -276,7 +317,13 @@ void uart_data_received_handler()
     {
         if (strstr(tmp_buffer, "OK\r\n") != NULL)
         {
+            esp01_at_error_received = false;
             esp01_at_ok_received = true;
+        }
+        if (strstr(tmp_buffer, "ERROR\r\n") != NULL)
+        {
+            esp01_at_ok_received = false;
+            esp01_at_error_received = true;
         }
 
         clear_tmp_data_buffer();

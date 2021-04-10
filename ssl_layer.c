@@ -1,7 +1,13 @@
+#include <stdio.h>
+#include "pico/stdlib.h"
+#include "hardware/gpio.h"
+#include "hardware/adc.h"
+
 #include "ssl_layer.h"
 #include "ssl_trusted_anchors.h"
 
 #include "bearssl.h"
+
 
 br_sslio_context ssl_io_context;
 br_ssl_client_context ssl_client_context;
@@ -17,8 +23,12 @@ int ssl_connect(
 {
     uint8_t rng_seeds[16];
 
-    for (uint8_t i = 0; i < sizeof rng_seeds; i++)
-        rng_seeds[i] = i;
+    adc_gpio_init(26);
+    adc_select_input(0);
+
+    for (uint8_t i = 0; i < sizeof rng_seeds; i++){
+        rng_seeds[i] = adc_read();
+    }
 
     br_ssl_client_init_full(&ssl_client_context, &ssl_x509_context, TAs, TAs_NUM);
     br_ssl_engine_set_buffer(&ssl_client_context.eng, tls_io_buf, sizeof tls_io_buf, 1);
